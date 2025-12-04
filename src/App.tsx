@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type React from 'react'
 import {
   VIRALITY_WEIGHTS,
   STOP_PHRASES,
@@ -118,6 +119,7 @@ export default function App() {
   })
   const [copied, setCopied] = useState(false)
   const [openRules, setOpenRules] = useState<RuleKey | null>(null)
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; lines: string[] } | null>(null)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(form))
@@ -325,7 +327,7 @@ export default function App() {
         <section className="panel">
           <div className="label" style={{ marginBottom: 8 }}>
             <span className="time">Итог</span>
-            <span>Без тайм‑кодов, абзац на блок</span>
+            <span>предварительный просмотр</span>
           </div>
           <div className="preview">
             {paragraphs.map((p) => {
@@ -333,9 +335,24 @@ export default function App() {
               const ratio = bs ? (bs.max > 0 ? bs.pts / bs.max : 0) : 0
               const status = ratio >= 0.75 ? 'good' : ratio >= 0.45 ? 'warn' : 'bad'
               const tips = (bs?.tips || [])
-              const title = status === 'good' || tips.length === 0 ? undefined : `Что улучшить:\n- ${tips.join('\n- ')}`
+              const showTips = status !== 'good' && tips.length > 0
+              const onEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+                if (!showTips) { setTooltip(null); return }
+                setTooltip({ x: e.clientX + 14, y: e.clientY + 14, lines: tips })
+              }
+              const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+                if (!showTips) return
+                setTooltip({ x: e.clientX + 14, y: e.clientY + 14, lines: tips })
+              }
+              const onLeave = () => setTooltip(null)
               return (
-                <div key={p.key} className={`hl hl-${status}`} title={title}>
+                <div
+                  key={p.key}
+                  className={`hl hl-${status}`}
+                  onMouseEnter={onEnter}
+                  onMouseMove={onMove}
+                  onMouseLeave={onLeave}
+                >
                   <div className="para">{p.text}</div>
                 </div>
               )
@@ -401,6 +418,17 @@ export default function App() {
               <button className="close-btn" type="button" onClick={close}>Понятно</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {tooltip && (
+        <div className="tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
+          <div className="t-head">Что улучшить</div>
+          <ul>
+            {tooltip.lines.map((l, i) => (
+              <li key={i}>{l}</li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
@@ -501,15 +529,15 @@ function computeVirality(f: FormState) {
   if (hLen > 0) {
     if (hLen < HOOK_MIN || hLen > HOOK_MAX) {
       hookLenPts = 0
-      suggestions.push(`Сделайте хук ${HOOK_IDEAL_MIN}–${HOOK_IDEAL_MAX} символов, сейчас ${hLen}.`)
+      addTip('hook', `Сделайте хук ${HOOK_IDEAL_MIN}–${HOOK_IDEAL_MAX} символов, сейчас ${hLen}.`)
     } else if (hLen >= HOOK_IDEAL_MIN && hLen <= HOOK_IDEAL_MAX) {
       hookLenPts = 25
     } else if (hLen < HOOK_IDEAL_MIN) {
       hookLenPts = clamp(((hLen - HOOK_MIN) / (HOOK_IDEAL_MIN - HOOK_MIN)) * 25, 0, 25)
-      suggestions.push(`Хук короче оптимума (${HOOK_IDEAL_MIN}–${HOOK_IDEAL_MAX}). Усильте формулировку.`)
+      addTip('hook', `Хук короче оптимума (${HOOK_IDEAL_MIN}–${HOOK_IDEAL_MAX}). Усильте формулировку.`)
     } else if (hLen > HOOK_IDEAL_MAX) {
       hookLenPts = clamp(((HOOK_MAX - hLen) / (HOOK_MAX - HOOK_IDEAL_MAX)) * 25, 0, 25)
-      suggestions.push('Сделайте хук компактнее — режьте до сути.')
+      addTip('hook', 'Сделайте хук компактнее — режьте до сути.')
     }
   } else {
     addTip('hook', 'Добавьте сильный хук в первые 2 секунды.')

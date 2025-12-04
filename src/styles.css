@@ -178,10 +178,12 @@ body {
 .hl-warn {
   background: rgba(246, 201, 69, 0.12);
   border-color: rgba(246, 201, 69, 0.25);
+  cursor: help;
 }
 .hl-bad {
   background: rgba(255, 107, 107, 0.12);
   border-color: rgba(255, 107, 107, 0.25);
+  cursor: help;
 }
 
 .errors { color: var(--danger); font-size: 12px; margin: 6px 0 0; }
@@ -258,3 +260,20 @@ body {
 .modal .modal-body ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
 .modal .modal-foot { padding: 0 16px 16px; display: flex; justify-content: flex-end; }
 .modal .close-btn { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: #1a2340; color: var(--text); cursor: pointer; }
+
+/* Hover tooltip for preview tips */
+.tooltip {
+  position: fixed;
+  z-index: 60;
+  max-width: min(420px, calc(100% - 24px));
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  pointer-events: none;
+  font-size: 13px;
+}
+.tooltip .t-head { font-weight: 700; margin: 0 0 6px; }
+.tooltip ul { margin: 0; padding-left: 18px; color: var(--muted); }

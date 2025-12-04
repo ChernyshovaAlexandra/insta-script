@@ -25,7 +25,7 @@ const EMO_WORDS = [
 type HookType = 'fact' | 'mistake' | ''
 type RuleKey = 'hook' | 'problem' | 'promise' | 'body' | 'climax' | 'outro'
 
-type BlockScore = { pts: number; max: number }
+type BlockScore = { pts: number; max: number; tips: string[] }
 type Blocks = Record<RuleKey, BlockScore>
 
 type Rule = { title: string; subtitle: string; items: string[]; examples?: string[] }
@@ -332,8 +332,10 @@ export default function App() {
               const bs = virality.blocks?.[p.key]
               const ratio = bs ? (bs.max > 0 ? bs.pts / bs.max : 0) : 0
               const status = ratio >= 0.75 ? 'good' : ratio >= 0.45 ? 'warn' : 'bad'
+              const tips = (bs?.tips || [])
+              const title = status === 'good' || tips.length === 0 ? undefined : `Что улучшить:\n- ${tips.join('\n- ')}`
               return (
-                <div key={p.key} className={`hl hl-${status}`}>
+                <div key={p.key} className={`hl hl-${status}`} title={title}>
                   <div className="para">{p.text}</div>
                 </div>
               )
@@ -480,6 +482,18 @@ function computeVirality(f: FormState) {
 
   let score = 0
   const suggestions: string[] = []
+  const blockTips: Record<RuleKey, string[]> = {
+    hook: [],
+    problem: [],
+    promise: [],
+    body: [],
+    climax: [],
+    outro: [],
+  }
+  const addTip = (k: RuleKey, msg: string) => {
+    suggestions.push(msg)
+    blockTips[k].push(msg)
+  }
 
   // Hook (0–2 сек): 35 баллов
   const hLen = len(f.hook)
@@ -498,15 +512,16 @@ function computeVirality(f: FormState) {
       suggestions.push('Сделайте хук компактнее — режьте до сути.')
     }
   } else {
-    suggestions.push('Добавьте сильный хук в первые 2 секунды.')
+    addTip('hook', 'Добавьте сильный хук в первые 2 секунды.')
   }
   let hookTypePts = f.hookType ? 5 : 0
-  if (!f.hookType) suggestions.push('Укажите тип хука: факт или ошибка.')
+  if (!f.hookType) addTip('hook', 'Укажите тип хука: факт или ошибка.')
   const hookPatternPts = hasDigits(f.hook) || /[!?]/.test(f.hook) ? 3 : 0
-  if (!hookPatternPts) suggestions.push('Добавьте цифру или сильную формулировку в хук (%, ?!, «3 шага»).')
+  if (!hookPatternPts) addTip('hook', 'Добавьте цифру или сильную формулировку в хук (%, ?!, «3 шага»).')
   const hookEmoPts = has(f.hook, EMO_WORDS) ? 2 : 0
-  if (!hookEmoPts) suggestions.push('Добавьте эмоциональный маркер в хук: «шок/секрет/взрывной», эмодзи 🔥/💥.')
-  score += hookLenPts + hookTypePts + hookPatternPts + hookEmoPts
+  if (!hookEmoPts) addTip('hook', 'Добавьте эмоциональный маркер в хук: «шок/секрет/взрывной», эмодзи 🔥/💥.')
+  const hookPts = hookLenPts + hookTypePts + hookPatternPts + hookEmoPts
+  score += hookPts
 
   // Problem (2–5 сек): 10 баллов
   let problemPts = 0
@@ -514,10 +529,10 @@ function computeVirality(f: FormState) {
     const pLen = len(f.problem)
     problemPts += pLen <= 140 ? 6 : clamp((240 - pLen) / 100, 0, 6)
     problemPts += sentences(f.problem) <= 1 ? 4 : 0
-    if (sentences(f.problem) > 1) suggestions.push('Суть проблемы — одним предложением.')
-    if (pLen > 140) suggestions.push('Сделайте формулировку проблемы короче и конкретнее.')
+    if (sentences(f.problem) > 1) addTip('problem', 'Суть проблемы — одним предложением.')
+    if (pLen > 140) addTip('problem', 'Сделайте формулировку проблемы короче и конкретнее.')
   } else {
-    suggestions.push('Коротко опишите, почему важно досмотреть дальше (2–5 сек).')
+    addTip('problem', 'Коротко опишите, почему важно досмотреть дальше (2–5 сек).')
   }
   score += problemPts
 
@@ -530,10 +545,10 @@ function computeVirality(f: FormState) {
     promisePts += hasDigits(f.promise) || has(f.promise, promiseKeywords) ? 6 : 0
     promisePts += has(f.promise, ['покажу', 'узнаешь', 'получишь', 'дам']) ? 3 : 0
     if (!(hasDigits(f.promise) || has(f.promise, promiseKeywords))) {
-      suggestions.push('Сделайте обещание конкретным: цифра/метрика/«в 3 шага».')
+      addTip('promise', 'Сделайте обещание конкретным: цифра/метрика/«в 3 шага».')
     }
   } else {
-    suggestions.push('Дайте конкретное обещание результата (5–8 сек).')
+    addTip('promise', 'Дайте конкретное обещание результата (5–8 сек).')
   }
   score += promisePts
 
@@ -545,15 +560,15 @@ function computeVirality(f: FormState) {
     bodyPts += n >= 2 && n <= 5 ? 10 : clamp(10 - Math.abs((n || 1) - 3) * 3, 0, 10)
     const avg = ls.length ? ls.reduce((a, b) => a + b.length, 0) / n : len(f.body)
     if (avg >= 40 && avg <= 120) bodyPts += 5
-    else suggestions.push('Дробите основную часть на 2–5 коротких строк (40–120 симв.).')
+    else addTip('body', 'Дробите основную часть на 2–5 коротких строк (40–120 симв.).')
     const hasBullets = /^[-•—]/m.test(f.body)
     bodyPts += hasBullets ? 3 : 0
-    if (!hasBullets) suggestions.push('Добавьте маркеры в основной части: начинайте строки с “-”.')
+    if (!hasBullets) addTip('body', 'Добавьте маркеры в основной части: начинайте строки с “-”.')
     const hasEmo = has(f.body, EMO_WORDS)
     bodyPts += hasEmo ? 2 : 0
-    if (!hasEmo) suggestions.push('Добавьте 1–2 эмоциональных усилителя в основной части (слова‑маркеры/эмодзи).')
+    if (!hasEmo) addTip('body', 'Добавьте 1–2 эмоциональных усилителя в основной части (слова‑маркеры/эмодзи).')
   } else {
-    suggestions.push('Раскройте 2–4 тезиса в основной части (8–28 сек).')
+    addTip('body', 'Раскройте 2–4 тезиса в основной части (8–28 сек).')
   }
   score += bodyPts
 
@@ -564,9 +579,9 @@ function computeVirality(f: FormState) {
     climaxPts += clLen <= 160 ? 5 : clamp((240 - clLen) / 80, 0, 5)
     climaxPts += has(f.climax, ['итог', 'результат', 'секрет', 'главное', 'самое важное', 'вывод']) ? 5 : 0
     if (!has(f.climax, ['итог', 'результат', 'секрет', 'главное', 'самое важное', 'вывод']))
-      suggestions.push('В кульминации подчеркните результат/инсайт: «вывод», «итог».')
+      addTip('climax', 'В кульминации подчеркните результат/инсайт: «вывод», «итог».')
   } else {
-    suggestions.push('Добавьте кульминационный пункт (28–34 сек) — главный инсайт/результат.')
+    addTip('climax', 'Добавьте кульминационный пункт (28–34 сек) — главный инсайт/результат.')
   }
   score += climaxPts
 
@@ -578,9 +593,9 @@ function computeVirality(f: FormState) {
     const hasCta = has(f.outro, ctas)
     outroPts += hasCta ? 7 : 0
     outroPts += oLen <= 120 ? 3 : clamp((200 - oLen) / 80, 0, 3)
-    if (!hasCta) suggestions.push('Добавьте мягкий CTA: подпишитесь/сохраните/напишите комментарий.')
+    if (!hasCta) addTip('outro', 'Добавьте мягкий CTA: подпишитесь/сохраните/напишите комментарий.')
   } else {
-    suggestions.push('Сделайте короткий мини-вывод + мягкий CTA (34–40 сек).')
+    addTip('outro', 'Сделайте короткий мини-вывод + мягкий CTA (34–40 сек).')
   }
   score += outroPts
 
@@ -593,19 +608,19 @@ function computeVirality(f: FormState) {
   // Open loop / контраст в начале
   const hasOpenLoop = /\?/.test(early) || has(early, OPEN_LOOP_WORDS) || has(early, CONTRAST_MARKERS)
   if (hasOpenLoop) bonus += VIRALITY_WEIGHTS.bonus.openLoop
-  else suggestions.push('Добавьте открытую петлю в начале: вопрос/контраст «не … а …».')
+  else addTip('hook', 'Добавьте открытую петлю в начале: вопрос/контраст «не … а …».')
 
   // Раннее обращение ко второму лицу
   const hasSecondEarly = has(early, SECOND_PERSON)
   if (hasSecondEarly) bonus += VIRALITY_WEIGHTS.bonus.secondPersonEarly
-  else suggestions.push('Обратитесь к зрителю во второй лице вначале («ты/вы»).')
+  else addTip('hook', 'Обратитесь к зрителю во второй лице вначале («ты/вы»).')
 
   // Императивные строки в основной части
   const bodyLines = lines(f.body)
   const impCount = bodyLines.filter(isImperativeLine).length
   const impRatio = bodyLines.length ? impCount / bodyLines.length : 0
   bonus += Math.round(VIRALITY_WEIGHTS.bonus.imperativeLines * clamp(impRatio, 0, 1))
-  if (impRatio < 0.5 && bodyLines.length > 0) suggestions.push('Начинайте строки в основной части с действия (императив).')
+  if (impRatio < 0.5 && bodyLines.length > 0) addTip('body', 'Начинайте строки в основной части с действия (императив).')
 
   // Уникальность/разнообразие слов
   const allText = [f.hook, f.problem, f.promise, f.body, f.climax, f.outro].join(' ')
@@ -613,25 +628,25 @@ function computeVirality(f: FormState) {
   const ttr = ws.length ? unique(ws).length / ws.length : 0
   const ttrNorm = clamp((ttr - 0.35) / (0.6 - 0.35), 0, 1) // 0.35..0.6 → 0..1
   bonus += Math.round(VIRALITY_WEIGHTS.bonus.uniqueness * ttrNorm)
-  if (ttr < 0.4) suggestions.push('Повысьте разнообразие формулировок: избегайте повторов слов.')
+  if (ttr < 0.4) addTip('body', 'Повысьте разнообразие формулировок: избегайте повторов слов.')
 
   // Канцелярит/вода — штраф
   const stopCount = countMatches(allText, STOP_PHRASES)
-  if (stopCount > 0) suggestions.push('Уберите канцелярит/воду: "в целом", "на самом деле", "в рамках"…')
+  if (stopCount > 0) addTip('body', 'Уберите канцелярит/воду: «в целом», «на самом деле», «в рамках»…')
   malus += Math.round(VIRALITY_WEIGHTS.penalty.stopPhrases * clamp(stopCount / 2, 0, 1))
 
   // Перебор пунктуации/эмодзи — штраф
   const emoCount = countEmojis(allText)
   const punctCount = countPunct(allText)
   const overload = emoCount + punctCount
-  if (overload > 3) suggestions.push('Сократите количество !, ? и эмодзи — без перегруза.')
+  if (overload > 3) addTip('hook', 'Сократите количество !, ? и эмодзи — без перегруза.')
   malus += Math.round(VIRALITY_WEIGHTS.penalty.punctEmojiSpam * clamp((overload - 3) / 5, 0, 1))
 
   // Капслок — штраф
   const longWords = ws.filter((w) => w.length >= 6)
   const capsWords = longWords.filter((w) => capsRatio(w) >= 0.7)
   const capsShare = longWords.length ? capsWords.length / longWords.length : 0
-  if (capsShare > 0.05) suggestions.push('Избегайте КАПСЛОКА — это снижает доверие.')
+  if (capsShare > 0.05) addTip('body', 'Избегайте КАПСЛОКА — это снижает доверие.')
   malus += Math.round(VIRALITY_WEIGHTS.penalty.caps * clamp((capsShare - 0.05) / 0.2, 0, 1))
 
   // Повторы биграмм — штраф
@@ -639,7 +654,7 @@ function computeVirality(f: FormState) {
   const totalBigrams = bgs.length
   const uniqB = unique(bgs)
   const repeatShare = totalBigrams ? 1 - uniqB.length / totalBigrams : 0
-  if (repeatShare > 0.2) suggestions.push('Избавьтесь от повторов — переформулируйте одинаковые фразы.')
+  if (repeatShare > 0.2) addTip('body', 'Избавьтесь от повторов — переформулируйте одинаковые фразы.')
   malus += Math.round(VIRALITY_WEIGHTS.penalty.repetition * clamp((repeatShare - 0.2) / 0.4, 0, 1))
 
   score = Math.round(clamp(score + bonus - malus, 0, 100))
@@ -648,5 +663,13 @@ function computeVirality(f: FormState) {
 
   // Уберём дубликаты подсказок
   const uniq = Array.from(new Set(suggestions))
-  return { score, level, suggestions: uniq }
+  const blocks: Blocks = {
+    hook: { pts: hookPts, max: 35, tips: Array.from(new Set(blockTips.hook)) },
+    problem: { pts: problemPts, max: 10, tips: Array.from(new Set(blockTips.problem)) },
+    promise: { pts: promisePts, max: 15, tips: Array.from(new Set(blockTips.promise)) },
+    body: { pts: bodyPts, max: 20, tips: Array.from(new Set(blockTips.body)) },
+    climax: { pts: climaxPts, max: 10, tips: Array.from(new Set(blockTips.climax)) },
+    outro: { pts: outroPts, max: 10, tips: Array.from(new Set(blockTips.outro)) },
+  }
+  return { score, level, suggestions: uniq, blocks }
 }

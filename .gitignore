@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+.vite/
+.cache/
+
+# Env files (keep base .env tracked if needed)
+.env.local
+.env.*.local
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/
+

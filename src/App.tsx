@@ -120,10 +120,25 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [openRules, setOpenRules] = useState<RuleKey | null>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; lines: string[] } | null>(null)
+  const [persistEnabled, setPersistEnabled] = useState(true)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(form))
-  }, [form])
+    if (persistEnabled) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(form))
+    }
+  }, [form, persistEnabled])
+
+  // Автосохранение каждые 3 минуты, если не сброшено
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (persistEnabled) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(form))
+        } catch {}
+      }
+    }, 3 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [form, persistEnabled])
 
   const hookLen = form.hook.trim().length
   const hookValid = hookLen >= HOOK_MIN && hookLen <= HOOK_MAX
@@ -150,6 +165,7 @@ export default function App() {
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
     setCopied(false)
+    if (!persistEnabled) setPersistEnabled(true)
   }
 
   async function copy() {
@@ -160,6 +176,8 @@ export default function App() {
   function reset() {
     setForm(empty)
     setCopied(false)
+    try { localStorage.removeItem(STORAGE_KEY) } catch {}
+    setPersistEnabled(false)
   }
   function open(key: RuleKey) { setOpenRules(key) }
   function close() { setOpenRules(null) }
@@ -357,6 +375,11 @@ export default function App() {
                 </div>
               )
             })}
+          </div>
+          <div className="actions" style={{ marginTop: 12 }}>
+            <button className="btn" type="button" onClick={copy}>
+              {copied ? 'Скопировано ✓' : 'Скопировать текст'}
+            </button>
           </div>
         </section>
       </aside>
